@@ -89,7 +89,7 @@ void loop() {
     }
     else {
       joystick.setHatSwitch(0, 0); // Dpad-UP
-      Serial.println("Dpad-UP");
+      Serial.println("Dpad-UP"); 
       delay(encoderDelay);
     }
   }
