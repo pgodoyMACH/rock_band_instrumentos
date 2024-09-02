@@ -137,7 +137,7 @@ void loop() {
       pedalState[i] = false;
     }
   }
- 
+    
   // Leer pads con debounce
   for (int i = 0; i < NUM_PADS; i++) {
     int sensorValue = analogRead(padPins[i]);
