@@ -1,25 +1,28 @@
 #include <RotaryEncoder.h>
 #include <Joystick.h>
 
-
-
 // Define variables
-#define NUM_PADS 7
+#define NUM_PADS 4
 #define NUM_PEDALS 1
 
 // Pines de entrada para pads, pedales, botones, y encoder
-int padPins[NUM_PADS] = {A0, A1, A2, A3, A8, A9, A10}; // Pines de los pads
-int pedalPins[NUM_PEDALS] = {2}; // Pines de los pedales
-int buttonPins[] = {4, 5, 6, 7, 8, 9}; // Pines para A, B, X, Y, Select, Start, Home
-int encoderPinCW = 14; // pin del encoder movimiento horario
-int encoderPinCCW = 16; // pin del encoder movimiento anti-horario
-int encoderSwitchPin = 10; // Switch interno del encoder
+int padPins[NUM_PADS] = {A0, A1, A2, A3}; // Pines de los pads
+int pedalPins[NUM_PEDALS] = {16}; // Pines de los pedales
+int buttonPins[] = {0, 1, 2, 3, 4, 5, 6}; // Pines para A, B, X, Y, Select, Start, Home
+int encoderPinCW = 15; // pin del encoder movimiento horario
+int encoderPinCCW = 14; // pin del encoder movimiento anti-horario
+int encoderSwitchPin = 7; // Switch interno del encoder
 
 // Instancia de encoder
 RotaryEncoder encoder(encoderPinCW, encoderPinCCW, RotaryEncoder::LatchMode::FOUR3); 
 
 // Umbral para detectar un golpe en los pads
-int threshold = 6000;
+int threshold = 80; // Umbral para detectar un golpe en los pads
+int encoderDelay  = 5;  // Tiempo de espera luego de presionar una posición en el dpad
+
+// Variables para debounce de los pads
+unsigned long padLastTriggerTime[NUM_PADS] = {0}; // Último tiempo que cada pad fue presionado
+const unsigned long padDebounceTime = 50; // Tiempo de debounce en milisegundos
 
 // Instancia del Joystick
 Joystick_ joystick(
@@ -33,52 +36,47 @@ Joystick_ joystick(
   false, false, false          // Accelerator, brake, steering
 );
 
-
-
-  // Estado de los botones
+// Estado de los botones
 bool padState[NUM_PADS] = {false};
 bool pedalState[NUM_PEDALS] = {false};
 bool buttonState[sizeof(buttonPins) / sizeof(buttonPins[0])] = {false};
 
 void setup() {
+  Serial.begin(9600);
 
-            Serial.begin(9600);
+  // Configuración de pines
+  pinMode(encoderSwitchPin, INPUT_PULLUP);
+  
+  for (int i = 0; i < NUM_PADS; i++) {
+    pinMode(padPins[i], INPUT);
+  }
 
-            // Configuración de pines
-            pinMode(encoderSwitchPin, INPUT_PULLUP);
-              
-            for (int i = 0; i < NUM_PADS; i++) {
-              pinMode(padPins[i], INPUT);
-            }
+  for (int i = 0; i < NUM_PEDALS; i++) {
+    pinMode(pedalPins[i], INPUT_PULLUP);
+  }
 
-            for (int i = 0; i < NUM_PEDALS; i++) {
-              pinMode(pedalPins[i], INPUT_PULLUP);
-            }
+  for (int i = 0; i < sizeof(buttonPins) / sizeof(buttonPins[0]); i++) {
+    pinMode(buttonPins[i], INPUT_PULLUP);
+  }
 
-            for (int i = 0; i < sizeof(buttonPins) / sizeof(buttonPins[0]); i++) {
-              pinMode(buttonPins[i], INPUT_PULLUP);
-            }
-
-              // Inicializar Joystick
-            joystick.begin();
-
-
-
-
+  // Inicializar Joystick
+  joystick.begin();
 }
+
 bool Horizontal = false;
 bool lastEncoderSwitchValue = true;
+
 void loop() {
 
-//Control de modo del encoder
-bool encoderSwitchValue = digitalRead(encoderSwitchPin);
+  // Control de modo del encoder
+  bool encoderSwitchValue = digitalRead(encoderSwitchPin);
 
-if (encoderSwitchValue == LOW && lastEncoderSwitchValue == HIGH){
-      Horizontal = !Horizontal;
-    }
+  if (encoderSwitchValue == LOW && lastEncoderSwitchValue == HIGH){
+    Horizontal = !Horizontal;
+    delay(200); // Delay para evitar rebotes en el switch
+  }
 
-//Manejo de botones del encoder
-
+  // Manejo de botones del encoder
   static int pos = 0;
   encoder.tick();
   int direction = (int)(encoder.getDirection());
@@ -87,20 +85,31 @@ if (encoderSwitchValue == LOW && lastEncoderSwitchValue == HIGH){
     if (Horizontal){  
       joystick.setHatSwitch(0, 270); // Dpad-LEFT
       Serial.println("Dpad-LEFT");
-
-     }
-     else {joystick.setHatSwitch(0, 0); // Dpad-UP
-       Serial.println("Dpad-UP");
-      }}
-  else if (direction < 0) {
+      delay(encoderDelay);
+    }
+    else {
+      joystick.setHatSwitch(0, 0); // Dpad-UP
+      Serial.println("Dpad-UP");
+      delay(encoderDelay);
+    }
+  }
+  if (direction < 0) {
     if (Horizontal){  
-      joystick.setHatSwitch(0, 90); // Dpad-RIGHT}
+      joystick.setHatSwitch(0, 90); // Dpad-RIGHT
       Serial.println("Dpad-RIGHT");
-      }
-      else {joystick.setHatSwitch(0, 180); // Dpad-DOWN
+      delay(encoderDelay);
+    }
+    else {
+      joystick.setHatSwitch(0, 180); // Dpad-DOWN
       Serial.println("Dpad-DOWN");
-      }}
-      else {joystick.setHatSwitch(0, -1);}
+      delay(encoderDelay);
+    }
+  }
+  else {
+    joystick.setHatSwitch(0, -1);
+    // Serial.println("Dpad-rest");
+    delay(1);
+  }
   pos = newPos;
   lastEncoderSwitchValue = encoderSwitchValue;
 
@@ -129,16 +138,29 @@ if (encoderSwitchValue == LOW && lastEncoderSwitchValue == HIGH){
     }
   }
 
-  // Leer pads
+  // Leer pads con debounce
   for (int i = 0; i < NUM_PADS; i++) {
     int sensorValue = analogRead(padPins[i]);
-    if (sensorValue > threshold && !padState[i]) {
-      joystick.pressButton(i);
-      padState[i] = true;
-    } else if (sensorValue <= threshold && padState[i]) {
-      joystick.releaseButton(i);
-      padState[i] = false;
-    }    
-   }  
-   //
+    unsigned long currentTime = millis();
+    
+    if (sensorValue > threshold) {
+      // Verificar si el pad no está ya en estado presionado y ha pasado el tiempo de debounce
+      if (!padState[i] && (currentTime - padLastTriggerTime[i] > padDebounceTime)) {
+        // Registrar la pulsación del pad
+        joystick.pressButton(i);
+        joystick.releaseButton(i); // Liberar inmediatamente para registrar un solo evento
+        padState[i] = true;
+        padLastTriggerTime[i] = currentTime;
+        Serial.print("Pad ");
+        Serial.print(i);
+        Serial.println(" hit");
+      }
+    }
+    else {
+      // Resetear el estado del pad cuando la señal baja del umbral
+      if (padState[i]) {
+        padState[i] = false;
+      }
+    }
+  }  
 }
