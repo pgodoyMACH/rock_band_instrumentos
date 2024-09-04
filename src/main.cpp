@@ -17,7 +17,7 @@ int encoderSwitchPin = 7; // Switch interno del encoder
 RotaryEncoder encoder(encoderPinCW, encoderPinCCW, RotaryEncoder::LatchMode::FOUR3); 
 
 // Umbral para detectar un golpe en los pads
-int threshold = 80; // Umbral para detectar un golpe en los pads
+int threshold = 100; // Umbral para detectar un golpe en los pads
 int encoderDelay  = 50; //50 optimo // Tiempo de espera luego de presionar una posición en el dpad
 
 // Variables para debounce de los pads
@@ -42,7 +42,6 @@ bool pedalState[NUM_PEDALS] = {false};
 bool buttonState[sizeof(buttonPins) / sizeof(buttonPins[0])] = {false};
 
 void setup() {
-  Serial.begin(9600);
 
   // Configuración de pines
   pinMode(encoderSwitchPin, INPUT_PULLUP);
@@ -84,31 +83,26 @@ void loop() {
   if (direction > 0 ) {
     if (Horizontal){  
       joystick.setHatSwitch(0, 270); // Dpad-LEFT
-      Serial.println("Dpad-LEFT");
       delay(encoderDelay);
     }
     else {
       joystick.setHatSwitch(0, 0); // Dpad-UP
-      Serial.println("Dpad-UP"); 
       delay(encoderDelay);
     }
   }
   if (direction < 0) {
     if (Horizontal){  
       joystick.setHatSwitch(0, 90); // Dpad-RIGHT
-      Serial.println("Dpad-RIGHT");
       delay(encoderDelay);
     }
     else {
       joystick.setHatSwitch(0, 180); // Dpad-DOWN
-      Serial.println("Dpad-DOWN");
       delay(encoderDelay);
     }
   }
   else {
     joystick.setHatSwitch(0, -1);
     delay(0);
-    // Serial.println("Dpad-rest");
 
   }
   pos = newPos;
@@ -118,10 +112,25 @@ void loop() {
   // Leer botones
   for (int i = 0; i < sizeof(buttonPins) / sizeof(buttonPins[0]); i++) {
     int buttonValue = digitalRead(buttonPins[i]);
+    int correspondingPadIndex = -1;
+    
+    // Asignar botones a los pads correspondientes
+    if (i == 5) correspondingPadIndex = 0; // Pin 5 al pad 0
+    if (i == 4) correspondingPadIndex = 3; // Pin 4 al pad 3
+    if (i == 6) correspondingPadIndex = 2; // Pin 6 al pad 2
+    if (i == 3) correspondingPadIndex = 1; // Pin 3 al pad 1
+    
     if (buttonValue == LOW && !buttonState[i]) {
+      if (correspondingPadIndex >= 0) {
+        joystick.pressButton(correspondingPadIndex);
+        joystick.releaseButton(correspondingPadIndex);
+      }
       joystick.pressButton(NUM_PADS + NUM_PEDALS + i);
       buttonState[i] = true;
     } else if (buttonValue == HIGH && buttonState[i]) {
+      if (correspondingPadIndex >= 0) {
+        joystick.releaseButton(correspondingPadIndex);
+      }
       joystick.releaseButton(NUM_PADS + NUM_PEDALS + i);
       buttonState[i] = false;
     }
@@ -152,9 +161,7 @@ void loop() {
         joystick.releaseButton(i); // Liberar inmediatamente para registrar un solo evento
         padState[i] = true;
         padLastTriggerTime[i] = currentTime;
-        Serial.print("Pad ");
-        Serial.print(i);
-        Serial.println(" hit");
+ 
       }
     }
     else {
@@ -164,4 +171,5 @@ void loop() {
      }
     }
  }
+ delay(1);
 }
